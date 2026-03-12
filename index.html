@@ -3,31 +3,27 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>黑暗淘金</title>
+    <title>暗域防线</title>
     <link rel="stylesheet" href="css/style.css">
 </head>
 <body>
     <div id="gameContainer">
         <canvas id="gameCanvas"></canvas>
 
-        <!-- Menu Screen -->
         <div id="menuScreen" class="overlay">
-            <h1>黑暗淘金</h1>
-            <p class="subtitle">在视觉逐步剥夺后，仅凭听觉和光信号进行高风险判断</p>
-            <p>鼠标点击发射抓钩<br>长按瞄准，松开发射<br>空格键自动瞄准最亮目标<br>数字键1-3使用道具<br>R键重开</p>
-            <button id="startBtn" class="btn">开始淘金</button>
-            <button id="expertBtn" class="btn btn-secondary">高手模式: 关</button>
-            <p id="expertInfo">闪光减少，分数+20%</p>
+            <h1>暗域防线</h1>
+            <p class="subtitle">在绝对黑暗中，仅凭雷达和枪火光芒，守卫基地</p>
+            <p>鼠标移动瞄准，点击/长按射击<br>数字键1-3使用道具<br>R键重开</p>
+            <button id="startBtn" class="btn">开始防御</button>
         </div>
 
-        <!-- End Screen -->
         <div id="endScreen" class="overlay">
-            <h2 id="endTitle">时间到！</h2>
-            <p id="endScore">得分: 0 / 300</p>
+            <h2 id="endTitle">基地沦陷！</h2>
+            <p id="endScore">得分: 0 / 500</p>
             <button id="endBtn" class="btn">再来一局</button>
         </div>
 
-        <div class="controls-hint">点击/空格=发射 | 长按=瞄准 | 1-3=道具 | R=重开</div>
+        <div class="controls-hint">点击/长按=射击 | 1-3=道具 | R=重开</div>
     </div>
 
     <script type="module" src="js/main.js"></script>

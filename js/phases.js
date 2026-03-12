@@ -16,28 +16,22 @@ export class PhaseController {
     reset() {
         this.current = Phase.BRIGHT;
         this.darknessAlpha = 0;
-        this.adaptiveDelay = 0; // seconds to delay darkness
     }
 
     update(elapsed) {
-        const t = elapsed;
-        const brightEnd = CONFIG.PHASE_BRIGHT_END + this.adaptiveDelay;
-        const dimEnd = CONFIG.PHASE_DIM_END + this.adaptiveDelay;
-        const darkEnd = CONFIG.PHASE_DARK_END;
-
-        if (t < brightEnd) {
+        if (elapsed < CONFIG.PHASE_BRIGHT_END) {
             this.current = Phase.BRIGHT;
             this.darknessAlpha = 0;
-        } else if (t < dimEnd) {
+        } else if (elapsed < CONFIG.PHASE_DIM_END) {
             this.current = Phase.DIM;
-            const progress = (t - brightEnd) / (dimEnd - brightEnd);
-            this.darknessAlpha = progress * 0.92;
-        } else if (t < darkEnd) {
+            const progress = (elapsed - CONFIG.PHASE_BRIGHT_END) / (CONFIG.PHASE_DIM_END - CONFIG.PHASE_BRIGHT_END);
+            this.darknessAlpha = progress * 0.93;
+        } else if (elapsed < CONFIG.PHASE_DARK_END) {
             this.current = Phase.DARK;
-            this.darknessAlpha = 0.92;
+            this.darknessAlpha = 0.93;
         } else {
             this.current = Phase.PULSE;
-            this.darknessAlpha = 0.92;
+            this.darknessAlpha = 0.93;
         }
     }
 
@@ -49,11 +43,7 @@ export class PhaseController {
         return this.current !== Phase.BRIGHT;
     }
 
-    getPulseIntensity(elapsed) {
-        if (this.current !== Phase.PULSE) return 1;
-        // Accelerating pulse in final 10 seconds
-        const t = elapsed - CONFIG.PHASE_DARK_END;
-        const freq = 2 + t * 0.5; // increasing frequency
-        return 0.7 + 0.3 * Math.sin(t * freq * Math.PI * 2);
+    getSpeedMultiplier() {
+        return this.current === Phase.PULSE ? CONFIG.PULSE_SPEED_MULT : 1;
     }
 }

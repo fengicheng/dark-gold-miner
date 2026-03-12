@@ -5,7 +5,7 @@
 }
 
 body {
-    background: #0a0a0a;
+    background: #050508;
     display: flex;
     justify-content: center;
     align-items: center;
@@ -22,9 +22,9 @@ body {
 
 #gameCanvas {
     display: block;
-    border: 2px solid #333;
+    border: 1px solid #222;
     border-radius: 4px;
-    cursor: crosshair;
+    cursor: none;
     width: 100%;
     height: 100%;
 }
@@ -39,7 +39,7 @@ body {
     flex-direction: column;
     justify-content: center;
     align-items: center;
-    background: rgba(0, 0, 0, 0.85);
+    background: rgba(0, 0, 0, 0.88);
     z-index: 10;
     color: #fff;
 }
@@ -47,14 +47,14 @@ body {
 .overlay h1 {
     font-size: 36px;
     margin-bottom: 10px;
-    color: #FFD700;
-    text-shadow: 0 0 20px rgba(255, 215, 0, 0.5);
+    color: #4488FF;
+    text-shadow: 0 0 30px rgba(68, 136, 255, 0.5);
 }
 
 .overlay h2 {
     font-size: 28px;
     margin-bottom: 20px;
-    color: #FFD700;
+    color: #4488FF;
 }
 
 .overlay p {
@@ -68,7 +68,7 @@ body {
 
 .overlay .subtitle {
     font-size: 14px;
-    color: #888;
+    color: #668;
     margin-bottom: 30px;
     font-style: italic;
 }
@@ -77,9 +77,9 @@ body {
     padding: 12px 40px;
     font-size: 18px;
     font-family: 'Courier New', monospace;
-    background: linear-gradient(135deg, #DAA520, #FFD700);
-    color: #1a1a1a;
-    border: none;
+    background: linear-gradient(135deg, #335, #448);
+    color: #8AF;
+    border: 1px solid #4488FF;
     border-radius: 6px;
     cursor: pointer;
     margin: 8px;
@@ -89,28 +89,12 @@ body {
 
 .btn:hover {
     transform: scale(1.05);
-    box-shadow: 0 0 20px rgba(255, 215, 0, 0.4);
+    box-shadow: 0 0 20px rgba(68, 136, 255, 0.4);
+    background: linear-gradient(135deg, #446, #559);
 }
 
 .btn:active {
     transform: scale(0.97);
-}
-
-.btn-secondary {
-    background: linear-gradient(135deg, #555, #777);
-    color: #fff;
-    font-size: 14px;
-    padding: 8px 20px;
-}
-
-#expertBtn {
-    display: none;
-}
-
-#expertInfo {
-    display: none;
-    font-size: 12px;
-    color: #666;
 }
 
 .controls-hint {
@@ -119,5 +103,5 @@ body {
     left: 50%;
     transform: translateX(-50%);
     font-size: 11px;
-    color: #555;
+    color: #335;
 }

@@ -1,20 +1,20 @@
-// Main game entry point - state machine & game loop
+// Main game - Dark Domain Defense (暗域防线)
 import { CONFIG } from './config.js';
 import { Input } from './input.js';
 import { PhaseController, Phase } from './phases.js';
 import { Renderer } from './renderer.js';
-import { Hook, HookState } from './hook.js';
-import { Item, generateItems } from './items.js';
+import { Turret, Bullet } from './turret.js';
+import { Enemy, WaveSpawner } from './enemies.js';
 import { SoundManager } from './sound.js';
 import { PowerupManager } from './powerups.js';
 import { HUD } from './hud.js';
+import { Radar } from './radar.js';
 import { Tutorial } from './tutorial.js';
-import { getTargetScore, getLevelConfig } from './levels.js';
+import { getTargetScore } from './levels.js';
 
 const GameState = {
     MENU: 'menu',
     PLAYING: 'playing',
-    ROUND_END: 'roundEnd',
     LEVEL_UP: 'levelUp',
     GAME_OVER: 'gameOver',
 };
@@ -29,50 +29,38 @@ class Game {
         this.renderer = new Renderer(this.canvas);
         this.sound = new SoundManager();
         this.phase = new PhaseController();
-        this.hook = new Hook();
+        this.turret = new Turret();
+        this.radar = new Radar();
         this.powerups = new PowerupManager();
         this.hud = new HUD();
         this.tutorial = new Tutorial();
+        this.spawner = new WaveSpawner();
 
         this.state = GameState.MENU;
         this.level = 1;
         this.score = 0;
+        this.lives = CONFIG.MAX_LIVES;
         this.elapsed = 0;
-        this.items = [];
+        this.enemies = [];
+        this.bullets = [];
         this.particles = [];
-        this.mistakes = 0;
-        this.consecutiveMistakes = 0;
-        this.consecutiveSuccess = 0;
-        this.expertMode = false;
-        this.expertStreak = 0;
+        this.illuminations = []; // {x, y, timer}
+        this.hitFeedback = 0;
         this.heartbeatTimer = 0;
         this.windTimer = 0;
-        this.retractTrail = null;
+        this.footstepTimers = {};
         this.lastTime = 0;
-        this.tutorialAutoFireTimer = 0;
 
-        // Adaptive difficulty
-        this.adaptiveStruggling = false;
-        this.adaptiveDoingWell = false;
-
-        // UI overlays
+        // UI
         this.menuDiv = document.getElementById('menuScreen');
         this.endDiv = document.getElementById('endScreen');
         this.endTitle = document.getElementById('endTitle');
         this.endScore = document.getElementById('endScore');
         this.endBtn = document.getElementById('endBtn');
         this.startBtn = document.getElementById('startBtn');
-        this.expertBtn = document.getElementById('expertBtn');
-        this.expertInfo = document.getElementById('expertInfo');
 
         this.startBtn.addEventListener('click', () => this.startGame());
         this.endBtn.addEventListener('click', () => this.handleEndAction());
-        if (this.expertBtn) {
-            this.expertBtn.addEventListener('click', () => {
-                this.expertMode = !this.expertMode;
-                this.expertBtn.textContent = this.expertMode ? '高手模式: 开' : '高手模式: 关';
-            });
-        }
 
         this.showMenu();
         requestAnimationFrame(t => this.loop(t));
@@ -82,11 +70,6 @@ class Game {
         this.state = GameState.MENU;
         this.menuDiv.style.display = 'flex';
         this.endDiv.style.display = 'none';
-        // Show expert button if unlocked
-        if (this.expertStreak >= CONFIG.EXPERT_UNLOCK_STREAK && this.expertBtn) {
-            this.expertBtn.style.display = 'block';
-            this.expertInfo.style.display = 'block';
-        }
     }
 
     startGame() {
@@ -94,36 +77,28 @@ class Game {
         this.menuDiv.style.display = 'none';
         this.endDiv.style.display = 'none';
         this.level = 1;
-        this.score = 0;
-        this.mistakes = 0;
-        this.consecutiveMistakes = 0;
-        this.consecutiveSuccess = 0;
         this.startRound();
-
-        // Tutorial check
-        if (this.tutorial.shouldRun()) {
-            this.tutorial.start();
-        }
+        if (this.tutorial.shouldRun()) this.tutorial.start();
     }
 
     startRound() {
         this.state = GameState.PLAYING;
         this.elapsed = 0;
         this.score = 0;
-        this.mistakes = 0;
-        this.consecutiveMistakes = 0;
-        this.consecutiveSuccess = 0;
+        this.lives = CONFIG.MAX_LIVES;
+        this.enemies = [];
+        this.bullets = [];
         this.particles = [];
-        this.retractTrail = null;
+        this.illuminations = [];
+        this.hitFeedback = 0;
+        this.heartbeatTimer = 0;
+        this.footstepTimers = {};
 
         this.phase.reset();
-        this.phase.adaptiveDelay = this.adaptiveStruggling ? CONFIG.ADAPTIVE_DARK_DELAY : 0;
-        this.hook.reset();
+        this.turret.reset();
+        this.radar.reset();
         this.powerups.reset();
-        this.items = generateItems(this.level);
-
-        const cfg = getLevelConfig(this.level);
-        // Could adjust hook swing speed per level here
+        this.spawner.reset(this.level);
     }
 
     handleEndAction() {
@@ -140,9 +115,7 @@ class Game {
         const dt = Math.min((timestamp - this.lastTime) / 1000, 0.05);
         this.lastTime = timestamp;
 
-        if (this.state === GameState.PLAYING) {
-            this.update(dt);
-        }
+        if (this.state === GameState.PLAYING) this.update(dt);
         this.draw();
 
         requestAnimationFrame(t => this.loop(t));
@@ -152,11 +125,177 @@ class Game {
         this.elapsed += dt;
         const timeLeft = CONFIG.ROUND_DURATION - this.elapsed;
 
-        // Phase update
+        // Phase
         this.phase.update(this.elapsed);
         this.sound.setDarkBoost(this.phase.isDark());
+        const speedMult = this.phase.getSpeedMultiplier();
 
-        // Heartbeat in dark
+        // Rapid fire powerup
+        this.turret.fireRateMultiplier = this.powerups.isRapidFireActive() ? CONFIG.RAPID_FIRE_MULT : 1;
+
+        // Turret
+        this.turret.update(dt, this.input.mouseX, this.input.mouseY);
+
+        // Shooting - click or hold
+        if (this.input.mouseDown || this.input.consumeClick()) {
+            if (this.turret.canFire()) {
+                const bullet = this.turret.fire(this.input.mouseX, this.input.mouseY);
+                if (bullet) {
+                    this.bullets.push(bullet);
+                    this.sound.playShoot();
+                }
+            }
+        }
+
+        // Powerup keys 1-3
+        for (let i = 0; i < 3; i++) {
+            if (this.input.consumeKey(`${i + 1}`)) {
+                if (this.powerups.use(i)) {
+                    if (this.powerups.isFlareActive()) this.sound.playFlare();
+                    else this.sound.playSonar();
+                }
+            }
+        }
+
+        // R restart
+        if (this.input.consumeKey('r') || this.input.consumeKey('R')) {
+            this.startRound();
+            return;
+        }
+
+        // Spawn enemies
+        this.spawner.update(dt, this.elapsed, this.enemies);
+
+        // Update enemies
+        let closestDist = Infinity;
+        for (const enemy of this.enemies) {
+            enemy.update(dt, speedMult);
+            const d = enemy.distToTurret();
+            if (d < closestDist && enemy.alive) closestDist = d;
+
+            // Bomber beep
+            if (enemy.type === 'bomber' && enemy.bomberActive && enemy.alive) {
+                enemy.beepTimer += dt;
+                if (enemy.beepTimer >= enemy.beepInterval) {
+                    enemy.beepTimer = 0;
+                    this.sound.playBomberBeep();
+                }
+            }
+
+            // Footstep sounds (throttled per enemy type)
+            if (enemy.alive && this.phase.isDimOrDarker() && enemy.type !== 'stealth') {
+                const key = enemy.type;
+                if (!this.footstepTimers[key]) this.footstepTimers[key] = 0;
+                this.footstepTimers[key] += dt;
+                const interval = enemy.type === 'fast' ? 0.3 : enemy.type === 'heavy' ? 0.8 : 0.5;
+                if (this.footstepTimers[key] >= interval) {
+                    this.footstepTimers[key] = 0;
+                    const pan = (enemy.x - CONFIG.TURRET_X) / (CONFIG.CANVAS_WIDTH / 2);
+                    this.sound.playFootstep(enemy.type, pan);
+                }
+            }
+
+            // Enemy reaches base
+            if (enemy.alive && enemy.reachedBase()) {
+                enemy.alive = false;
+
+                // Bomber = instant game over
+                if (enemy.type === 'bomber') {
+                    this.sound.playBaseDestroy();
+                    this.hud.addScreenShake(15, 0.5);
+                    this.hud.addScreenFlash('rgba(255,0,0,0.6)', 0.4);
+                    this.lives = 0;
+                } else if (this.powerups.useShield()) {
+                    this.hud.addFloatingText(CONFIG.TURRET_X, CONFIG.TURRET_Y - 30, '护盾!', '#4488FF', 18);
+                    this.hud.addScreenFlash('rgba(68,136,255,0.3)', 0.2);
+                    this.sound.playHit();
+                } else {
+                    this.lives--;
+                    this.hud.addScreenShake(8, 0.3);
+                    if (this.lives <= 0) {
+                        this.sound.playBaseDestroy();
+                        this.hud.addScreenFlash('rgba(255,0,0,0.5)', 0.5);
+                    } else {
+                        this.sound.playBaseHit();
+                        this.hud.addScreenFlash('rgba(255,0,0,0.3)', 0.2);
+                    }
+                }
+
+                if (this.lives <= 0) {
+                    this._endRound(false);
+                    return;
+                }
+            }
+        }
+
+        // Update bullets
+        for (const bullet of this.bullets) {
+            bullet.update(dt);
+        }
+
+        // Bullet-enemy collision
+        for (const bullet of this.bullets) {
+            if (!bullet.alive) continue;
+            for (const enemy of this.enemies) {
+                if (!enemy.alive) continue;
+                // Stealth: only hittable if illuminated or flare/sonar/nightvision active
+                if (enemy.type === 'stealth' && !enemy.illuminated &&
+                    !this.powerups.isFlareActive() && !this.powerups.isSonarActive() &&
+                    !this.powerups.isNightVisionActive() && this.phase.isDimOrDarker()) {
+                    continue;
+                }
+                const dist = Math.hypot(bullet.x - enemy.x, bullet.y - enemy.y);
+                if (dist < enemy.radius + CONFIG.BULLET_RADIUS) {
+                    bullet.alive = false;
+                    const killed = enemy.hit();
+                    if (killed) {
+                        this._onKill(enemy);
+                    } else {
+                        this.sound.playHit();
+                        this.hud.addFloatingText(enemy.x, enemy.y - 20, '!', '#FF8800', 14);
+                    }
+                    this.hitFeedback = 0.3;
+                    break;
+                }
+            }
+        }
+
+        // Cleanup
+        this.bullets = this.bullets.filter(b => b.alive);
+        this.enemies = this.enemies.filter(e => e.alive || e.illuminateTimer > 0);
+
+        // Illumination timers
+        for (const ill of this.illuminations) {
+            ill.timer -= dt;
+        }
+        this.illuminations = this.illuminations.filter(i => i.timer > 0);
+
+        // Particles
+        for (const p of this.particles) {
+            p.x += p.vx * dt;
+            p.y += p.vy * dt;
+            p.vy += 100 * dt;
+            p.life -= dt;
+            p.alpha = Math.max(0, p.life / p.maxLife);
+        }
+        this.particles = this.particles.filter(p => p.life > 0);
+
+        // Hit feedback decay
+        if (this.hitFeedback > 0) this.hitFeedback = Math.max(0, this.hitFeedback - dt * 3);
+
+        // Radar
+        this.radar.update(dt);
+
+        // Powerups
+        this.powerups.update(dt);
+
+        // HUD
+        this.hud.update(dt, closestDist);
+
+        // Tutorial
+        this.tutorial.update(dt);
+
+        // Heartbeat
         if (this.phase.isDark()) {
             this.heartbeatTimer += dt;
             const rate = 1 - timeLeft / CONFIG.ROUND_DURATION;
@@ -166,310 +305,85 @@ class Game {
             }
         }
 
-        // Wind in dim phase
+        // Wind
         if (this.phase.current === Phase.DIM) {
             this.windTimer += dt;
-            if (this.windTimer > 3) {
-                this.sound.playWind();
-                this.windTimer = 0;
-            }
+            if (this.windTimer > 3) { this.sound.playWind(); this.windTimer = 0; }
         }
 
-        // Update items
-        for (const item of this.items) {
-            item.update(dt);
-        }
-
-        // Tutorial auto-fire
-        if (this.tutorial.active && this.elapsed > 2 && this.elapsed < 5) {
-            this.tutorialAutoFireTimer += dt;
-            if (this.tutorialAutoFireTimer > 2 && this.hook.state === HookState.SWINGING) {
-                const target = this.tutorial.getAutoTarget(this.items);
-                if (target) {
-                    this.hook.fire(target.x, target.y);
-                    this.sound.playHookFire();
-                }
-            }
-        }
-
-        // Input handling
-        if (this.input.consumeClick()) {
-            if (this.hook.state === HookState.SWINGING) {
-                this.hook.fire(this.input.mouseX, this.input.mouseY);
-                this.sound.playHookFire();
-            }
-        }
-
-        // Aim line while holding
-        if (this.input.isHolding() && this.hook.state === HookState.SWINGING) {
-            this._aimTarget = { x: this.input.mouseX, y: this.input.mouseY };
-        } else {
-            this._aimTarget = null;
-        }
-
-        // Space bar: auto-aim at brightest glow
-        if (this.input.consumeKey(' ') && this.hook.state === HookState.SWINGING) {
-            const target = this._findBrightestItem();
-            if (target) {
-                this.hook.fire(target.x, target.y);
-                this.sound.playHookFire();
-            } else {
-                this.hook.fireAtAngle();
-                this.sound.playHookFire();
-            }
-        }
-
-        // Powerup keys 1-3
-        for (let i = 0; i < 3; i++) {
-            if (this.input.consumeKey(`${i + 1}`)) {
-                if (this.powerups.use(i, this.items)) {
-                    this.sound.playPowerup();
-                }
-            }
-        }
-
-        // R to restart
-        if (this.input.consumeKey('r') || this.input.consumeKey('R')) {
-            this.startRound();
-            return;
-        }
-
-        // Hook update
-        const caught = this.hook.update(dt, this.items);
-
-        // Retract trail effect
-        if (this.hook.state === HookState.RETRACTING) {
-            this.retractTrail = {
-                x: this.hook.tipX, y: this.hook.tipY,
-                ox: this.hook.originX, oy: this.hook.originY,
-                alpha: 0.3,
-            };
-            // Retract tick sound
-            if (this.hook.caughtItem && Math.random() < 0.1) {
-                this.sound.playRetract(this.hook.caughtItem.weight);
-            }
-        } else if (this.retractTrail) {
-            this.retractTrail.alpha -= dt * 3;
-            if (this.retractTrail.alpha <= 0) this.retractTrail = null;
-        }
-
-        // Handle caught item
-        if (caught) {
-            this._onCatch(caught);
-        }
-
-        // Handle miss (hook returned with nothing)
-        if (this.hook.state === HookState.SWINGING && !caught && this._wasFiring) {
-            // miss
-        }
-        this._wasFiring = this.hook.state === HookState.FIRING;
-
-        // Powerup update
-        this.powerups.update(dt);
-
-        // Particle update
-        for (const p of this.particles) {
-            p.x += p.vx * dt;
-            p.y += p.vy * dt;
-            p.vy += 80 * dt; // gravity
-            p.life -= dt;
-            p.alpha = Math.max(0, p.life / p.maxLife);
-        }
-        this.particles = this.particles.filter(p => p.life > 0);
-
-        // HUD update
-        this.hud.update(dt);
-
-        // Tutorial update
-        this.tutorial.update(dt, this.elapsed, {
-            consecutiveMistakes: this.consecutiveMistakes,
-        });
-
-        // Time up
+        // Time up check
         if (timeLeft <= 0) {
-            this._endRound();
+            const target = getTargetScore(this.level);
+            this._endRound(this.score >= target);
         }
     }
 
-    _onCatch(item) {
-        let points = item.points;
-        const isTrap = item.type === 'sandGold' || item.type === 'rock';
+    _onKill(enemy) {
+        this.score += enemy.points;
+        this.sound.playKill(enemy.type);
 
-        // Amulet protection
-        if (isTrap && this.powerups.hasAmulet) {
-            this.powerups.hasAmulet = false;
-            points = 0;
-            this.hud.addFloatingText(item.x, item.y - 20, '护身符!', '#FF6347', 16);
-            this.hud.addScreenFlash('rgba(255,99,71,0.3)', 0.2);
-        }
+        // Floating score
+        this.hud.addFloatingText(enemy.x, enemy.y - 20, `+${enemy.points}`, '#FFD700', 16);
+        this.hud.addScreenFlash('rgba(255,255,255,0.15)', 0.1);
 
-        // Lucky coin doubles positive
-        if (this.powerups.luckyCoinActive && points > 0) {
-            points *= 2;
-        }
+        // Kill illumination
+        this.illuminations.push({ x: enemy.x, y: enemy.y, timer: CONFIG.ILLUMINATE_DURATION });
+        this.sound.playIlluminate();
 
-        // Expert mode bonus
-        if (this.expertMode && points > 0) {
-            points = Math.floor(points * CONFIG.EXPERT_SCORE_BONUS);
-        }
-
-        // Mistake tracking
-        if (isTrap && points <= 0) {
-            this.mistakes++;
-            this.consecutiveMistakes++;
-            this.consecutiveSuccess = 0;
-
-            // Double penalty after MAX_MISTAKES
-            if (this.mistakes > CONFIG.MAX_MISTAKES && item.type === 'sandGold') {
-                points *= CONFIG.MISTAKE_PENALTY_MULTIPLIER;
-            }
-        } else if (points > 0) {
-            this.consecutiveSuccess++;
-            this.consecutiveMistakes = 0;
-            if (this.consecutiveSuccess >= CONFIG.CONSECUTIVE_SUCCESS_TO_CLEAR && this.mistakes > 0) {
-                this.mistakes--;
-                this.consecutiveSuccess = 0;
+        // Illuminate nearby enemies
+        for (const other of this.enemies) {
+            if (!other.alive || other === enemy) continue;
+            const dist = Math.hypot(other.x - enemy.x, other.y - enemy.y);
+            if (dist < CONFIG.ILLUMINATE_RADIUS) {
+                other.illuminate();
             }
         }
 
-        // Adaptive difficulty
-        if (this.consecutiveMistakes >= 3) {
-            this.adaptiveStruggling = true;
-        }
-        if (this.consecutiveSuccess >= 5) {
-            this.adaptiveDoingWell = true;
-        }
-
-        this.score += points;
-
-        // Sound
-        this._playCatchSound(item);
-
-        // Visual feedback
-        this._showCatchFeedback(item, points);
-
-        // Bag = powerup
-        if (item.type === 'bag') {
-            const pType = this.powerups.addRandom();
-            if (pType) {
-                this.sound.playPowerup();
-                const info = this.powerups.getInfo(pType);
-                this.hud.addFloatingText(item.x, item.y - 30, info.icon, info.color, 28);
-                // Auto-activate non-manual powerups
-                if (pType !== 'flashBomb' && pType !== 'echo') {
-                    this.powerups.use(this.powerups.inventory.indexOf(pType), this.items);
-                }
-            }
-        }
-
-        // Spawn particles
-        this._spawnParticles(item);
-    }
-
-    _playCatchSound(item) {
-        switch (item.type) {
-            case 'smallGold': this.sound.playSmallGold(); break;
-            case 'medGold': this.sound.playMedGold(); break;
-            case 'largeGold': this.sound.playLargeGold(); break;
-            case 'diamond': this.sound.playDiamond(); break;
-            case 'sandGold': this.sound.playSandGold(); break;
-            case 'rock': this.sound.playRock(); break;
-            case 'creature': this.sound.playCreature(); break;
-            case 'bag': this.sound.playBag(); break;
-        }
-    }
-
-    _showCatchFeedback(item, points) {
-        if (points > 0) {
-            const color = item.type === 'diamond' ? '#FFFFFF' : '#FFD700';
-            this.hud.addFloatingText(this.hook.originX, this.hook.originY + 30,
-                `+${points}`, color, Math.min(30, 14 + points / 10));
-
-            if (item.type === 'diamond') {
-                this.hud.addScreenFlash('rgba(255,255,255,0.3)', 0.2);
-            } else if (item.type === 'largeGold') {
-                this.hud.addScreenFlash('rgba(218,165,32,0.2)', 0.3);
-            } else {
-                this.hud.addScreenFlash('rgba(255,215,0,0.15)', 0.1);
-            }
-        } else if (points < 0) {
-            this.hud.addFloatingText(this.hook.originX, this.hook.originY + 30,
-                `${points}`, '#FF4444', 18);
-            this.hud.addScreenShake(5, 0.2);
-            this.hud.addScreenFlash('rgba(255,0,0,0.2)', 0.15);
-        } else {
-            // Rock or neutralized trap
-            this.hud.addScreenShake(3, 0.15);
-        }
-    }
-
-    _spawnParticles(item) {
-        const colors = {
-            smallGold: '#FFD700', medGold: '#FFC125', largeGold: '#DAA520',
-            diamond: '#FFFFFF', sandGold: '#8B7500', rock: '#696969',
-            creature: '#FFB6C1', bag: '#FF69B4',
-        };
-        const color = colors[item.type] || '#FFF';
-        for (let i = 0; i < 12; i++) {
+        // Particles
+        for (let i = 0; i < 15; i++) {
             const angle = Math.random() * Math.PI * 2;
-            const speed = 50 + Math.random() * 100;
+            const speed = 60 + Math.random() * 120;
             this.particles.push({
-                x: this.hook.originX,
-                y: this.hook.originY,
+                x: enemy.x, y: enemy.y,
                 vx: Math.cos(angle) * speed,
-                vy: Math.sin(angle) * speed - 40,
-                color,
+                vy: Math.sin(angle) * speed - 30,
+                color: enemy.particleColor,
                 size: 2 + Math.random() * 3,
-                life: 0.5 + Math.random() * 0.5,
-                maxLife: 1,
+                life: 0.4 + Math.random() * 0.4,
+                maxLife: 0.8,
                 alpha: 1,
             });
         }
+
+        // Light ring
+        this.particles.push({
+            x: enemy.x, y: enemy.y, vx: 0, vy: 0,
+            color: 'rgba(255,200,100,0.3)',
+            size: 5, life: 0.3, maxLife: 0.3, alpha: 1,
+            isRing: true,
+        });
+
+        // Powerup drop
+        this.powerups.tryDrop(enemy.x, enemy.y, enemy.dropRate);
     }
 
-    _findBrightestItem() {
-        let best = null;
-        let bestIntensity = 0;
-        for (const item of this.items) {
-            if (!item.alive) continue;
-            if (item.points <= 0) continue;
-            const intensity = item.getGlowIntensity();
-            if (intensity > bestIntensity) {
-                bestIntensity = intensity;
-                best = item;
-            }
-        }
-        return best;
-    }
-
-    _endRound() {
+    _endRound(won) {
         const target = getTargetScore(this.level);
-        if (this.score >= target) {
+        if (won) {
             this.state = GameState.LEVEL_UP;
             this.sound.playLevelUp();
-            this.endTitle.textContent = '过关！';
+            this.endTitle.textContent = '防线守住了！';
             this.endScore.textContent = `得分: ${this.score} / ${target}`;
             this.endBtn.textContent = '下一关';
-
-            // Expert streak
-            if (this.mistakes <= 1) {
-                this.expertStreak++;
-            } else {
-                this.expertStreak = 0;
-            }
         } else {
             this.state = GameState.GAME_OVER;
             this.sound.playGameOver();
-            this.endTitle.textContent = '时间到！';
+            this.endTitle.textContent = this.lives <= 0 ? '基地沦陷！' : '时间到！';
             this.endScore.textContent = `得分: ${this.score} / ${target}`;
             this.endBtn.textContent = '再来一局';
-            this.expertStreak = 0;
         }
         this.endDiv.style.display = 'flex';
-
-        if (this.tutorial.active) {
-            this.tutorial.complete();
-        }
+        if (this.tutorial.active) this.tutorial.complete();
     }
 
     draw() {
@@ -482,96 +396,88 @@ class Game {
         this.renderer.clear();
         this.renderer.drawBackground();
 
-        // Draw items (visible in light)
-        for (const item of this.items) {
-            item.draw(ctx, this.phase.darknessAlpha, 1);
+        // Draw enemies (visible in bright phase or when illuminated)
+        const flareActive = this.powerups.isFlareActive();
+        const nvActive = this.powerups.isNightVisionActive();
+        const sonarActive = this.powerups.isSonarActive();
+
+        if (!this.phase.isDimOrDarker() || flareActive) {
+            // Full visibility
+            for (const enemy of this.enemies) {
+                if (enemy.alive) enemy.draw(ctx);
+            }
         }
 
-        // Hook
-        this.hook.draw(ctx);
+        // Turret (always visible)
+        this.turret.draw(ctx);
 
-        // Aim line
-        if (this._aimTarget && this.hook.state === HookState.SWINGING) {
-            this.renderer.drawAimLine(
-                this.hook.originX, this.hook.originY,
-                this._aimTarget.x, this._aimTarget.y
-            );
+        // Bullets (always visible - they're glowing projectiles)
+        for (const bullet of this.bullets) {
+            bullet.draw(ctx);
         }
 
         // Darkness overlay
-        const darkMod = this.powerups.getDarknessModifier();
-        this.renderer.drawDarknessOverlay(this.phase.darknessAlpha, darkMod);
+        let darknessAlpha = this.phase.darknessAlpha;
+        if (flareActive) darknessAlpha = 0;
+        this.renderer.drawDarknessOverlay(darknessAlpha);
 
-        // Glow effects (visible through darkness)
-        if (this.phase.isDimOrDarker()) {
-            const pulse = this.phase.getPulseIntensity(this.elapsed);
-            this.renderer.drawItemGlows(this.items, pulse);
-
-            // Hook glow
-            this.hook.drawGlow(ctx);
-
-            // Stethoscope outlines
-            if (this.powerups.isStethoscopeActive()) {
-                this.renderer.drawStethoscopeOutlines(this.items);
+        // In dark: draw illuminated enemies as silhouettes
+        if (this.phase.isDimOrDarker() && !flareActive) {
+            // Illumination circles
+            for (const ill of this.illuminations) {
+                const alpha = ill.timer / CONFIG.ILLUMINATE_DURATION;
+                this.renderer.drawIllumination(ctx, ill.x, ill.y, alpha);
             }
 
-            // Night vision silhouettes
-            if (this.powerups.active && this.powerups.active.type === 'nightVision') {
-                this.renderer.drawNightVisionSilhouettes(this.items);
+            // Illuminated enemy silhouettes
+            for (const enemy of this.enemies) {
+                if (enemy.alive && enemy.illuminated) {
+                    enemy.drawSilhouette(ctx);
+                }
+            }
+
+            // Night vision outlines
+            if (nvActive) {
+                for (const enemy of this.enemies) {
+                    if (enemy.alive) enemy.drawNightVision(ctx);
+                }
+            }
+
+            // Sonar reveals
+            if (sonarActive) {
+                for (const enemy of this.enemies) {
+                    if (enemy.alive) enemy.drawSilhouette(ctx);
+                }
             }
         }
 
-        // Retract trail
-        if (this.retractTrail) {
-            ctx.globalAlpha = this.retractTrail.alpha;
-            this.renderer.drawRetractTrail(
-                this.retractTrail.x, this.retractTrail.y,
-                this.retractTrail.ox, this.retractTrail.oy
-            );
-            ctx.globalAlpha = 1;
-        }
-
-        // Particles
+        // Particles (always visible - they glow)
         this.renderer.drawParticles(this.particles);
 
-        // Echo effect
-        this.powerups.drawEcho(ctx);
+        // Powerup drops
+        this.powerups.drawDrops(ctx);
+        this.powerups.drawSonarWaves(ctx);
 
         ctx.restore();
 
         // HUD (no shake)
         const timeLeft = Math.max(0, CONFIG.ROUND_DURATION - this.elapsed);
-        this.hud.draw(ctx, this.score, getTargetScore(this.level), timeLeft, this.level, this.mistakes);
+        this.hud.draw(ctx, this.score, getTargetScore(this.level), timeLeft, this.level, this.lives);
+
+        // Radar (always visible, drawn on top)
+        this.radar.draw(ctx, this.enemies, this.powerups.isRadarBoostActive());
 
         // Powerup inventory
-        this.powerups.drawInventory(ctx, CONFIG.CANVAS_WIDTH, CONFIG.CANVAS_HEIGHT);
+        this.powerups.drawInventory(ctx);
 
-        // Tutorial overlay
+        // Crosshair (always visible)
+        this.renderer.drawCrosshair(ctx, this.input.mouseX, this.input.mouseY, this.hitFeedback);
+
+        // Tutorial
         this.tutorial.draw(ctx, CONFIG.CANVAS_WIDTH, CONFIG.CANVAS_HEIGHT);
-
-        // Hover info in bright phase
-        if (this.state === GameState.PLAYING && !this.phase.isDimOrDarker()) {
-            this._drawHoverInfo(ctx);
-        }
-    }
-
-    _drawHoverInfo(ctx) {
-        for (const item of this.items) {
-            if (!item.alive) continue;
-            const dist = Math.hypot(this.input.mouseX - item.x, this.input.mouseY - item.y);
-            if (dist < item.radius + 10) {
-                ctx.font = '12px Arial';
-                ctx.fillStyle = '#FFF';
-                ctx.textAlign = 'center';
-                ctx.fillText(item.cfg.name, item.x, item.y - item.radius - 8);
-                ctx.fillText(`${item.points > 0 ? '+' : ''}${item.points}分`, item.x, item.y - item.radius - 22);
-                break;
-            }
-        }
     }
 }
 
-// Boot
 window.addEventListener('DOMContentLoaded', () => {
     new Game();
 });

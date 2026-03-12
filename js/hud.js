@@ -1,20 +1,16 @@
-// HUD rendering - score, timer, level info
+// HUD - score, timer, lives, effects
 import { CONFIG } from './config.js';
 
 export class HUD {
     constructor() {
         this.floatingTexts = [];
-        this.screenFlash = null; // {color, alpha, duration}
-        this.screenShake = { x: 0, y: 0, remaining: 0 };
+        this.screenFlash = null;
+        this.screenShake = { x: 0, y: 0, remaining: 0, intensity: 0 };
+        this.edgeRedAlpha = 0;
     }
 
     addFloatingText(x, y, text, color, size = 20) {
-        this.floatingTexts.push({
-            x, y, text, color, size,
-            alpha: 1,
-            vy: -60,
-            life: 1.2,
-        });
+        this.floatingTexts.push({ x, y, text, color, size, alpha: 1, vy: -60, life: 1.2 });
     }
 
     addScreenFlash(color, duration = 0.15) {
@@ -26,7 +22,7 @@ export class HUD {
         this.screenShake.intensity = intensity;
     }
 
-    update(dt) {
+    update(dt, closestEnemyDist) {
         // Floating texts
         for (const ft of this.floatingTexts) {
             ft.y += ft.vy * dt;
@@ -53,12 +49,20 @@ export class HUD {
             this.screenShake.x = 0;
             this.screenShake.y = 0;
         }
+
+        // Edge red based on closest enemy
+        if (closestEnemyDist !== undefined && closestEnemyDist < CONFIG.DIST_WARN) {
+            this.edgeRedAlpha = Math.min(0.4, (1 - closestEnemyDist / CONFIG.DIST_WARN) * 0.4);
+        } else {
+            this.edgeRedAlpha = Math.max(0, this.edgeRedAlpha - dt * 2);
+        }
     }
 
-    draw(ctx, score, targetScore, timeLeft, level, mistakes) {
+    draw(ctx, score, targetScore, timeLeft, level, lives) {
         const W = CONFIG.CANVAS_WIDTH;
+        const H = CONFIG.CANVAS_HEIGHT;
 
-        // Top bar background
+        // Top bar
         ctx.fillStyle = 'rgba(0,0,0,0.5)';
         ctx.fillRect(0, 0, W, 35);
 
@@ -76,29 +80,15 @@ export class HUD {
         ctx.fillText(`${score} / ${targetScore}`, W / 2, 18);
 
         // Timer
-        const timeColor = timeLeft <= 10 ? '#FF4444' : '#FFFFFF';
-        ctx.fillStyle = timeColor;
+        ctx.fillStyle = timeLeft <= 10 ? '#FF4444' : '#FFFFFF';
         ctx.textAlign = 'right';
-        ctx.fillText(`${Math.ceil(timeLeft)}秒`, W - 15, 18);
+        ctx.fillText(`${Math.ceil(timeLeft)}秒`, W - 80, 18);
 
-        // Mistakes indicator
-        if (mistakes > 0) {
-            ctx.fillStyle = '#FF6666';
-            ctx.textAlign = 'right';
-            ctx.font = '12px Arial';
-            ctx.fillText('✕'.repeat(mistakes), W - 70, 18);
-        }
-
-        // Time ring at edges
-        if (timeLeft < CONFIG.ROUND_DURATION) {
-            const progress = timeLeft / CONFIG.ROUND_DURATION;
-            ctx.strokeStyle = `rgba(255,${Math.floor(progress * 255)},0,${0.15 + (1 - progress) * 0.15})`;
-            ctx.lineWidth = 3;
-            ctx.beginPath();
-            ctx.arc(W / 2, CONFIG.CANVAS_HEIGHT / 2, Math.min(W, CONFIG.CANVAS_HEIGHT) / 2 - 5,
-                -Math.PI / 2, -Math.PI / 2 + Math.PI * 2 * progress);
-            ctx.stroke();
-        }
+        // Lives
+        ctx.fillStyle = '#FF4444';
+        ctx.textAlign = 'right';
+        ctx.font = '14px Arial';
+        ctx.fillText('❤'.repeat(Math.max(0, lives)), W - 15, 18);
 
         // Floating texts
         for (const ft of this.floatingTexts) {
@@ -116,10 +106,32 @@ export class HUD {
 
         // Screen flash overlay
         if (this.screenFlash) {
+            ctx.save();
             ctx.fillStyle = this.screenFlash.color;
             ctx.globalAlpha = this.screenFlash.alpha;
-            ctx.fillRect(0, 0, W, CONFIG.CANVAS_HEIGHT);
-            ctx.globalAlpha = 1;
+            ctx.fillRect(0, 0, W, H);
+            ctx.restore();
+        }
+
+        // Edge red glow when enemies close
+        if (this.edgeRedAlpha > 0) {
+            ctx.save();
+            ctx.globalAlpha = this.edgeRedAlpha;
+            // Top/bottom/left/right edge gradients
+            const edgeSize = 40;
+            for (const [x1, y1, x2, y2, rx, ry, rw, rh] of [
+                [0, 0, 0, edgeSize, 0, 0, W, edgeSize],           // top
+                [0, H, 0, H - edgeSize, 0, H - edgeSize, W, edgeSize], // bottom
+                [0, 0, edgeSize, 0, 0, 0, edgeSize, H],           // left
+                [W, 0, W - edgeSize, 0, W - edgeSize, 0, edgeSize, H], // right
+            ]) {
+                const g = ctx.createLinearGradient(x1, y1, x2, y2);
+                g.addColorStop(0, 'rgba(255,0,0,0.6)');
+                g.addColorStop(1, 'rgba(255,0,0,0)');
+                ctx.fillStyle = g;
+                ctx.fillRect(rx, ry, rw, rh);
+            }
+            ctx.restore();
         }
     }
 

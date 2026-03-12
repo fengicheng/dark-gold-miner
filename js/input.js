@@ -1,14 +1,12 @@
-// Input manager for mouse and keyboard
+// Input manager
 export class Input {
     constructor(canvas) {
         this.canvas = canvas;
-        this.mouseX = 0;
-        this.mouseY = 0;
-        this.clicked = false;
+        this.mouseX = 450;
+        this.mouseY = 300;
         this.mouseDown = false;
-        this.mouseDownTime = 0;
+        this.clicked = false;
         this.keys = {};
-        this.hoveredItem = null;
 
         canvas.addEventListener('mousemove', e => {
             const rect = canvas.getBoundingClientRect();
@@ -19,23 +17,22 @@ export class Input {
         });
 
         canvas.addEventListener('mousedown', e => {
-            this.mouseDown = true;
-            this.mouseDownTime = performance.now();
+            if (e.button === 0) {
+                this.mouseDown = true;
+                this.clicked = true;
+            }
         });
 
         canvas.addEventListener('mouseup', e => {
-            if (this.mouseDown) {
-                this.clicked = true;
-            }
+            if (e.button === 0) this.mouseDown = false;
+        });
+
+        canvas.addEventListener('mouseleave', () => {
             this.mouseDown = false;
         });
 
         window.addEventListener('keydown', e => {
             this.keys[e.key] = true;
-            if (e.key === ' ') {
-                this.clicked = true;
-                e.preventDefault();
-            }
         });
 
         window.addEventListener('keyup', e => {
@@ -49,10 +46,6 @@ export class Input {
             return true;
         }
         return false;
-    }
-
-    isHolding() {
-        return this.mouseDown && (performance.now() - this.mouseDownTime > 150);
     }
 
     consumeKey(key) {
