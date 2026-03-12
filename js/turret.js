@@ -53,11 +53,17 @@ export class Turret {
         this.angle = -Math.PI / 2; // pointing up
         this.fireCooldown = 0;
         this.fireRateMultiplier = 1;
+        this.ammo = CONFIG.MAGAZINE_SIZE;
+        this.reloading = false;
+        this.reloadTimer = 0;
     }
 
     reset() {
         this.fireCooldown = 0;
         this.fireRateMultiplier = 1;
+        this.ammo = CONFIG.MAGAZINE_SIZE;
+        this.reloading = false;
+        this.reloadTimer = 0;
     }
 
     update(dt, mouseX, mouseY) {
@@ -65,10 +71,24 @@ export class Turret {
         this.angle = Math.atan2(mouseY - this.y, mouseX - this.x);
         // Cooldown
         if (this.fireCooldown > 0) this.fireCooldown -= dt;
+
+        // Reload
+        if (this.reloading) {
+            this.reloadTimer -= dt;
+            if (this.reloadTimer <= 0) {
+                this.reloading = false;
+                this.ammo = CONFIG.MAGAZINE_SIZE;
+            }
+        }
     }
 
     canFire() {
-        return this.fireCooldown <= 0;
+        return this.fireCooldown <= 0 && !this.reloading && this.ammo > 0;
+    }
+
+    getReloadProgress() {
+        if (!this.reloading) return -1;
+        return 1 - this.reloadTimer / CONFIG.RELOAD_TIME;
     }
 
     fire(mouseX, mouseY) {
@@ -80,6 +100,13 @@ export class Turret {
         if (len < 5) return null;
 
         this.fireCooldown = 1 / (CONFIG.FIRE_RATE * this.fireRateMultiplier);
+        this.ammo--;
+
+        // Auto reload when empty
+        if (this.ammo <= 0) {
+            this.reloading = true;
+            this.reloadTimer = CONFIG.RELOAD_TIME;
+        }
 
         // Spawn bullet slightly ahead of turret
         const nx = dx / len;

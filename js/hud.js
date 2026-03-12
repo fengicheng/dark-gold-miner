@@ -58,7 +58,7 @@ export class HUD {
         }
     }
 
-    draw(ctx, score, targetScore, timeLeft, level, lives) {
+    draw(ctx, score, targetScore, timeLeft, level, lives, ammoInfo) {
         const W = CONFIG.CANVAS_WIDTH;
         const H = CONFIG.CANVAS_HEIGHT;
 
@@ -111,6 +111,41 @@ export class HUD {
             ctx.globalAlpha = this.screenFlash.alpha;
             ctx.fillRect(0, 0, W, H);
             ctx.restore();
+        }
+
+        // Ammo display (bottom right)
+        if (ammoInfo) {
+            const ax = W - 120;
+            const ay = H - 40;
+            ctx.font = 'bold 14px "Courier New", monospace';
+            ctx.textAlign = 'left';
+            ctx.textBaseline = 'middle';
+
+            if (ammoInfo.reloading) {
+                // Reload progress bar
+                const barW = 100;
+                const barH = 12;
+                const bx = ax;
+                const by = ay - 6;
+
+                ctx.fillStyle = 'rgba(0,0,0,0.6)';
+                ctx.fillRect(bx, by, barW, barH);
+                ctx.strokeStyle = '#888';
+                ctx.lineWidth = 1;
+                ctx.strokeRect(bx, by, barW, barH);
+
+                const progress = ammoInfo.reloadProgress;
+                ctx.fillStyle = '#FFAA00';
+                ctx.fillRect(bx + 1, by + 1, (barW - 2) * progress, barH - 2);
+
+                ctx.fillStyle = '#FFAA00';
+                ctx.textAlign = 'center';
+                ctx.fillText('换弹中...', bx + barW / 2, ay + 14);
+            } else {
+                ctx.fillStyle = ammoInfo.ammo <= 3 ? '#FF4444' : '#CCCCCC';
+                ctx.textAlign = 'right';
+                ctx.fillText(`${ammoInfo.ammo} / ${ammoInfo.magazineSize}`, W - 20, ay);
+            }
         }
 
         // Edge red glow when enemies close

@@ -160,6 +160,78 @@ export class SoundManager {
         setTimeout(() => this._osc('sine', 400, 0.4, 0.1), 100);
     }
 
+    playReload() {
+        this.ensure();
+        const now = this.ctx.currentTime;
+        // Metallic click sequence simulating magazine swap
+        const g1 = this._gain(0.12);
+        const o1 = this.ctx.createOscillator();
+        o1.type = 'square';
+        o1.frequency.setValueAtTime(300, now);
+        o1.frequency.exponentialRampToValueAtTime(80, now + 0.15);
+        o1.connect(g1);
+        g1.gain.exponentialRampToValueAtTime(0.001, now + 0.2);
+        o1.start(now);
+        o1.stop(now + 0.21);
+
+        // Magazine insert click
+        setTimeout(() => {
+            this._osc('square', 500, 0.06, 0.15);
+            this._osc('triangle', 350, 0.04, 0.1);
+        }, 600);
+
+        // Chamber rack
+        setTimeout(() => {
+            this._osc('sawtooth', 200, 0.08, 0.12);
+            this._osc('square', 400, 0.05, 0.1);
+        }, 900);
+    }
+
+    playDarkWhisper() {
+        this.ensure();
+        const now = this.ctx.currentTime;
+        // Low rumbling whisper effect
+        const bufferSize = this.ctx.sampleRate * 2;
+        const buffer = this.ctx.createBuffer(1, bufferSize, this.ctx.sampleRate);
+        const data = buffer.getChannelData(0);
+        for (let i = 0; i < bufferSize; i++) {
+            data[i] = (Math.random() * 2 - 1) * 0.03;
+        }
+        const source = this.ctx.createBufferSource();
+        source.buffer = buffer;
+
+        const filter = this.ctx.createBiquadFilter();
+        filter.type = 'bandpass';
+        filter.frequency.value = 200;
+        filter.Q.value = 3;
+
+        const g = this.ctx.createGain();
+        g.gain.setValueAtTime(0, now);
+        g.gain.linearRampToValueAtTime(0.15 * this.darkBoost, now + 0.5);
+        g.gain.linearRampToValueAtTime(0.08 * this.darkBoost, now + 1.2);
+        g.gain.linearRampToValueAtTime(0, now + 2.0);
+        g.connect(this.ctx.destination);
+
+        // Deep tone underneath
+        const oLow = this.ctx.createOscillator();
+        oLow.type = 'sine';
+        oLow.frequency.setValueAtTime(65, now);
+        oLow.frequency.linearRampToValueAtTime(45, now + 2.0);
+        const gLow = this.ctx.createGain();
+        gLow.gain.setValueAtTime(0, now);
+        gLow.gain.linearRampToValueAtTime(0.1 * this.darkBoost, now + 0.3);
+        gLow.gain.linearRampToValueAtTime(0, now + 2.0);
+        gLow.connect(this.ctx.destination);
+        oLow.connect(gLow);
+        oLow.start(now);
+        oLow.stop(now + 2.1);
+
+        source.connect(filter);
+        filter.connect(g);
+        source.start(now);
+        source.stop(now + 2.1);
+    }
+
     playFlare() {
         this.ensure();
         const now = this.ctx.currentTime;

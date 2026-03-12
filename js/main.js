@@ -50,6 +50,8 @@ class Game {
         this.windTimer = 0;
         this.footstepTimers = {};
         this.lastTime = 0;
+        this.darkWhisperPlayed = false;
+        this.prevPhase = null;
 
         // UI
         this.menuDiv = document.getElementById('menuScreen');
@@ -99,6 +101,7 @@ class Game {
         this.radar.reset();
         this.powerups.reset();
         this.spawner.reset(this.level);
+        this.darkWhisperPlayed = false;
     }
 
     handleEndAction() {
@@ -126,9 +129,19 @@ class Game {
         const timeLeft = CONFIG.ROUND_DURATION - this.elapsed;
 
         // Phase
+        const prevPhase = this.phase.current;
         this.phase.update(this.elapsed);
         this.sound.setDarkBoost(this.phase.isDark());
         const speedMult = this.phase.getSpeedMultiplier();
+
+        // Dark whisper when entering dark phase
+        if (this.phase.isDark() && !this.darkWhisperPlayed) {
+            this.sound.playDarkWhisper();
+            this.darkWhisperPlayed = true;
+        }
+        if (!this.phase.isDark()) {
+            this.darkWhisperPlayed = false;
+        }
 
         // Rapid fire powerup
         this.turret.fireRateMultiplier = this.powerups.isRapidFireActive() ? CONFIG.RAPID_FIRE_MULT : 1;
@@ -139,10 +152,15 @@ class Game {
         // Shooting - click or hold
         if (this.input.mouseDown || this.input.consumeClick()) {
             if (this.turret.canFire()) {
+                const wasNotReloading = !this.turret.reloading;
                 const bullet = this.turret.fire(this.input.mouseX, this.input.mouseY);
                 if (bullet) {
                     this.bullets.push(bullet);
                     this.sound.playShoot();
+                    // Play reload sound when magazine empties
+                    if (this.turret.reloading && wasNotReloading) {
+                        this.sound.playReload();
+                    }
                 }
             }
         }
@@ -462,7 +480,12 @@ class Game {
 
         // HUD (no shake)
         const timeLeft = Math.max(0, CONFIG.ROUND_DURATION - this.elapsed);
-        this.hud.draw(ctx, this.score, getTargetScore(this.level), timeLeft, this.level, this.lives);
+        this.hud.draw(ctx, this.score, getTargetScore(this.level), timeLeft, this.level, this.lives, {
+            ammo: this.turret.ammo,
+            magazineSize: CONFIG.MAGAZINE_SIZE,
+            reloading: this.turret.reloading,
+            reloadProgress: this.turret.getReloadProgress(),
+        });
 
         // Radar (always visible, drawn on top)
         this.radar.draw(ctx, this.enemies, this.powerups.isRadarBoostActive());
