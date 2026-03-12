@@ -16,16 +16,12 @@ export class Renderer {
         const W = CONFIG.CANVAS_WIDTH;
         const H = CONFIG.CANVAS_HEIGHT;
 
-        // Dark battlefield gradient
-        const grad = ctx.createLinearGradient(0, 0, 0, H);
-        grad.addColorStop(0, '#0a0a15');
-        grad.addColorStop(0.5, '#0d0d1a');
-        grad.addColorStop(1, '#111122');
-        ctx.fillStyle = grad;
+        // White battlefield background
+        ctx.fillStyle = '#FFFFFF';
         ctx.fillRect(0, 0, W, H);
 
         // Ground line
-        ctx.strokeStyle = 'rgba(50,50,80,0.3)';
+        ctx.strokeStyle = 'rgba(180,180,200,0.5)';
         ctx.lineWidth = 1;
         ctx.beginPath();
         ctx.moveTo(0, CONFIG.TURRET_Y + CONFIG.TURRET_RADIUS + 5);
@@ -33,7 +29,7 @@ export class Renderer {
         ctx.stroke();
 
         // Subtle grid in background
-        ctx.strokeStyle = 'rgba(30,30,50,0.15)';
+        ctx.strokeStyle = 'rgba(200,200,220,0.3)';
         for (let x = 0; x < W; x += 50) {
             ctx.beginPath();
             ctx.moveTo(x, 0);

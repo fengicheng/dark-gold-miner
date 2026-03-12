@@ -5,14 +5,16 @@ export class Radar {
     constructor() {
         this.scanAngle = 0;
         this.blipFlashes = []; // {enemyId, timer}
+        this.positionHistory = new Map(); // enemyId -> [{x, y, time}]
     }
 
     reset() {
         this.scanAngle = 0;
         this.blipFlashes = [];
+        this.positionHistory = new Map();
     }
 
-    update(dt) {
+    update(dt, enemies, elapsed) {
         // Sweep from left (-PI) to right (0), i.e. over the upper semicircle
         this.scanAngle += CONFIG.RADAR_SCAN_SPEED * dt;
         if (this.scanAngle > Math.PI) this.scanAngle -= Math.PI;
@@ -22,6 +24,51 @@ export class Radar {
             f.timer -= dt;
         }
         this.blipFlashes = this.blipFlashes.filter(f => f.timer > 0);
+
+        // Record enemy positions for 1s delay
+        if (enemies) {
+            const aliveIds = new Set();
+            for (const enemy of enemies) {
+                if (!enemy.alive) continue;
+                const id = enemy;
+                aliveIds.add(id);
+                if (!this.positionHistory.has(id)) {
+                    this.positionHistory.set(id, []);
+                }
+                const hist = this.positionHistory.get(id);
+                hist.push({ x: enemy.x, y: enemy.y, time: elapsed });
+                // Keep only last 2 seconds of history
+                while (hist.length > 0 && elapsed - hist[0].time > 2) {
+                    hist.shift();
+                }
+            }
+            // Cleanup dead enemies
+            for (const id of this.positionHistory.keys()) {
+                if (!aliveIds.has(id)) {
+                    this.positionHistory.delete(id);
+                }
+            }
+        }
+    }
+
+    getDelayedPosition(enemy, elapsed) {
+        const hist = this.positionHistory.get(enemy);
+        if (!hist || hist.length === 0) return null;
+        const targetTime = elapsed - 1.0; // 1 second delay
+        // Find the closest record to targetTime
+        if (targetTime <= hist[0].time) return hist[0];
+        for (let i = 0; i < hist.length - 1; i++) {
+            if (hist[i].time <= targetTime && hist[i + 1].time >= targetTime) {
+                // Interpolate
+                const t = (targetTime - hist[i].time) / (hist[i + 1].time - hist[i].time);
+                return {
+                    x: hist[i].x + (hist[i + 1].x - hist[i].x) * t,
+                    y: hist[i].y + (hist[i + 1].y - hist[i].y) * t,
+                };
+            }
+        }
+        // If all history is older than targetTime, use latest
+        return hist[hist.length - 1];
     }
 
     addBlipFlash(id) {
@@ -30,7 +77,7 @@ export class Radar {
         }
     }
 
-    draw(ctx, enemies, radarBoostActive) {
+    draw(ctx, enemies, radarBoostActive, elapsed) {
         const cx = CONFIG.TURRET_X;
         const cy = CONFIG.TURRET_Y;
         const R = CONFIG.RADAR_RADIUS;
@@ -91,9 +138,14 @@ export class Radar {
         for (const enemy of enemies) {
             if (!enemy.alive) continue;
 
+            // Use delayed position (1s lag)
+            const delayedPos = this.getDelayedPosition(enemy, elapsed || 0);
+            const ex = delayedPos ? delayedPos.x : enemy.x;
+            const ey = delayedPos ? delayedPos.y : enemy.y;
+
             // Map enemy world position to radar position
-            const dx = enemy.x - cx;
-            const dy = enemy.y - cy;
+            const dx = ex - cx;
+            const dy = ey - cy;
             const worldDist = Math.hypot(dx, dy);
 
             // Max world distance = distance from turret to farthest point

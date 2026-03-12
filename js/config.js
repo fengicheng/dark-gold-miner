@@ -18,7 +18,7 @@ export const CONFIG = {
     FIRE_RATE: 5,
     BULLET_SPEED: 800,
     BULLET_RADIUS: 3,
-    MAGAZINE_SIZE: 15,
+    MAGAZINE_SIZE: 9,
     RELOAD_TIME: 1.2,
 
     // Kill illumination

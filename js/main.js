@@ -302,7 +302,7 @@ class Game {
         if (this.hitFeedback > 0) this.hitFeedback = Math.max(0, this.hitFeedback - dt * 3);
 
         // Radar
-        this.radar.update(dt);
+        this.radar.update(dt, this.enemies, this.elapsed);
 
         // Powerups
         this.powerups.update(dt);
@@ -488,7 +488,7 @@ class Game {
         });
 
         // Radar (always visible, drawn on top)
-        this.radar.draw(ctx, this.enemies, this.powerups.isRadarBoostActive());
+        this.radar.draw(ctx, this.enemies, this.powerups.isRadarBoostActive(), this.elapsed);
 
         // Powerup inventory
         this.powerups.drawInventory(ctx);
