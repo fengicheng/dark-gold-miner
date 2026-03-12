@@ -22,7 +22,7 @@ export const CONFIG = {
     RELOAD_TIME: 1.2,
 
     // Kill illumination
-    ILLUMINATE_RADIUS: 100,
+    ILLUMINATE_RADIUS: 250,
     ILLUMINATE_DURATION: 0.5,
 
     // Radar
