@@ -1,4 +1,6 @@
 // Input manager
+import { CONFIG } from './config.js';
+
 export class Input {
     constructor(canvas) {
         this.canvas = canvas;
@@ -12,8 +14,23 @@ export class Input {
             const rect = canvas.getBoundingClientRect();
             const scaleX = canvas.width / rect.width;
             const scaleY = canvas.height / rect.height;
-            this.mouseX = (e.clientX - rect.left) * scaleX;
-            this.mouseY = (e.clientY - rect.top) * scaleY;
+            let mx = (e.clientX - rect.left) * scaleX;
+            let my = (e.clientY - rect.top) * scaleY;
+
+            // Prevent cursor from entering radar semicircle area
+            const dx = mx - CONFIG.TURRET_X;
+            const dy = my - CONFIG.TURRET_Y;
+            const dist = Math.hypot(dx, dy);
+            const R = CONFIG.RADAR_RADIUS + 5; // small margin
+            if (dist < R && dy <= 0) {
+                // Push cursor to the edge of radar circle
+                const angle = Math.atan2(dy, dx);
+                mx = CONFIG.TURRET_X + Math.cos(angle) * R;
+                my = CONFIG.TURRET_Y + Math.sin(angle) * R;
+            }
+
+            this.mouseX = mx;
+            this.mouseY = my;
         });
 
         canvas.addEventListener('mousedown', e => {
