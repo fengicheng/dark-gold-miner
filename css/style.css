@@ -1,0 +1,123 @@
+* {
+    margin: 0;
+    padding: 0;
+    box-sizing: border-box;
+}
+
+body {
+    background: #0a0a0a;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    min-height: 100vh;
+    font-family: 'Courier New', monospace;
+    overflow: hidden;
+}
+
+#gameContainer {
+    position: relative;
+    width: 900px;
+    height: 600px;
+}
+
+#gameCanvas {
+    display: block;
+    border: 2px solid #333;
+    border-radius: 4px;
+    cursor: crosshair;
+    width: 100%;
+    height: 100%;
+}
+
+.overlay {
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    display: none;
+    flex-direction: column;
+    justify-content: center;
+    align-items: center;
+    background: rgba(0, 0, 0, 0.85);
+    z-index: 10;
+    color: #fff;
+}
+
+.overlay h1 {
+    font-size: 36px;
+    margin-bottom: 10px;
+    color: #FFD700;
+    text-shadow: 0 0 20px rgba(255, 215, 0, 0.5);
+}
+
+.overlay h2 {
+    font-size: 28px;
+    margin-bottom: 20px;
+    color: #FFD700;
+}
+
+.overlay p {
+    font-size: 16px;
+    color: #AAA;
+    margin-bottom: 8px;
+    text-align: center;
+    max-width: 400px;
+    line-height: 1.6;
+}
+
+.overlay .subtitle {
+    font-size: 14px;
+    color: #888;
+    margin-bottom: 30px;
+    font-style: italic;
+}
+
+.btn {
+    padding: 12px 40px;
+    font-size: 18px;
+    font-family: 'Courier New', monospace;
+    background: linear-gradient(135deg, #DAA520, #FFD700);
+    color: #1a1a1a;
+    border: none;
+    border-radius: 6px;
+    cursor: pointer;
+    margin: 8px;
+    transition: transform 0.1s, box-shadow 0.1s;
+    font-weight: bold;
+}
+
+.btn:hover {
+    transform: scale(1.05);
+    box-shadow: 0 0 20px rgba(255, 215, 0, 0.4);
+}
+
+.btn:active {
+    transform: scale(0.97);
+}
+
+.btn-secondary {
+    background: linear-gradient(135deg, #555, #777);
+    color: #fff;
+    font-size: 14px;
+    padding: 8px 20px;
+}
+
+#expertBtn {
+    display: none;
+}
+
+#expertInfo {
+    display: none;
+    font-size: 12px;
+    color: #666;
+}
+
+.controls-hint {
+    position: absolute;
+    bottom: 8px;
+    left: 50%;
+    transform: translateX(-50%);
+    font-size: 11px;
+    color: #555;
+}
