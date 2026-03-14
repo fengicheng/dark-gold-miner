@@ -38,6 +38,7 @@ class Game {
 
         this.state = GameState.MENU;
         this.level = 1;
+        this.savedLevel = 1; // 进度暂存：已通过的最高关卡+1
         this.score = 0;
         this.lives = CONFIG.MAX_LIVES;
         this.elapsed = 0;
@@ -78,7 +79,7 @@ class Game {
         this.sound.ensure();
         this.menuDiv.style.display = 'none';
         this.endDiv.style.display = 'none';
-        this.level = 1;
+        this.level = this.savedLevel;
         this.startRound();
         if (this.tutorial.shouldRun()) this.tutorial.start();
     }
@@ -107,10 +108,13 @@ class Game {
     handleEndAction() {
         if (this.state === GameState.LEVEL_UP) {
             this.level++;
+            this.savedLevel = this.level; // 暂存进度
             this.startRound();
             this.endDiv.style.display = 'none';
         } else {
-            this.showMenu();
+            // 失败后从当前关重新开始
+            this.startRound();
+            this.endDiv.style.display = 'none';
         }
     }
 
@@ -175,8 +179,10 @@ class Game {
             }
         }
 
-        // R restart
+        // R 清零全部进度，回到第一关
         if (this.input.consumeKey('r') || this.input.consumeKey('R')) {
+            this.level = 1;
+            this.savedLevel = 1;
             this.startRound();
             return;
         }
@@ -398,7 +404,7 @@ class Game {
             this.sound.playGameOver();
             this.endTitle.textContent = this.lives <= 0 ? '基地沦陷！' : '时间到！';
             this.endScore.textContent = `得分: ${this.score} / ${target}`;
-            this.endBtn.textContent = '再来一局';
+            this.endBtn.textContent = this.level > 1 ? `重试第${this.level}关` : '再来一局';
         }
         this.endDiv.style.display = 'flex';
         if (this.tutorial.active) this.tutorial.complete();
