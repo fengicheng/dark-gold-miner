@@ -10,13 +10,11 @@ import { PowerupManager } from './powerups.js';
 import { HUD } from './hud.js';
 import { Radar } from './radar.js';
 import { Tutorial } from './tutorial.js';
-import { getTargetScore } from './levels.js';
-
 const GameState = {
     MENU: 'menu',
     PLAYING: 'playing',
-    LEVEL_UP: 'levelUp',
     GAME_OVER: 'gameOver',
+    VICTORY: 'victory',
 };
 
 class Game {
@@ -37,8 +35,6 @@ class Game {
         this.spawner = new WaveSpawner();
 
         this.state = GameState.MENU;
-        this.level = 1;
-        this.savedLevel = 1; // 进度暂存：已通过的最高关卡+1
         this.score = 0;
         this.lives = CONFIG.MAX_LIVES;
         this.elapsed = 0;
@@ -79,7 +75,6 @@ class Game {
         this.sound.ensure();
         this.menuDiv.style.display = 'none';
         this.endDiv.style.display = 'none';
-        this.level = this.savedLevel;
         this.startRound();
         if (this.tutorial.shouldRun()) this.tutorial.start();
     }
@@ -101,21 +96,14 @@ class Game {
         this.turret.reset();
         this.radar.reset();
         this.powerups.reset();
-        this.spawner.reset(this.level);
+        this.spawner.reset();
         this.darkWhisperPlayed = false;
+        this.sound.playBGM();
     }
 
     handleEndAction() {
-        if (this.state === GameState.LEVEL_UP) {
-            this.level++;
-            this.savedLevel = this.level; // 暂存进度
-            this.startRound();
-            this.endDiv.style.display = 'none';
-        } else {
-            // 失败后从当前关重新开始
-            this.startRound();
-            this.endDiv.style.display = 'none';
-        }
+        this.startRound();
+        this.endDiv.style.display = 'none';
     }
 
     loop(timestamp) {
@@ -133,8 +121,7 @@ class Game {
         const timeLeft = CONFIG.ROUND_DURATION - this.elapsed;
 
         // Phase
-        const prevPhase = this.phase.current;
-        this.phase.update(this.elapsed);
+        this.phase.update(this.elapsed, this.spawner.isBrightOverride());
         this.sound.setDarkBoost(this.phase.isDark());
         const speedMult = this.phase.getSpeedMultiplier();
 
@@ -179,10 +166,8 @@ class Game {
             }
         }
 
-        // R 清零全部进度，回到第一关
+        // R 重新开始
         if (this.input.consumeKey('r') || this.input.consumeKey('R')) {
-            this.level = 1;
-            this.savedLevel = 1;
             this.startRound();
             return;
         }
@@ -335,10 +320,9 @@ class Game {
             if (this.windTimer > 3) { this.sound.playWind(); this.windTimer = 0; }
         }
 
-        // Time up check
+        // Time up = victory (survived!)
         if (timeLeft <= 0) {
-            const target = getTargetScore(this.level);
-            this._endRound(this.score >= target);
+            this._endRound(true);
         }
     }
 
@@ -392,19 +376,19 @@ class Game {
     }
 
     _endRound(won) {
-        const target = getTargetScore(this.level);
+        this.sound.stopBGM();
         if (won) {
-            this.state = GameState.LEVEL_UP;
+            this.state = GameState.VICTORY;
             this.sound.playLevelUp();
             this.endTitle.textContent = '防线守住了！';
-            this.endScore.textContent = `得分: ${this.score} / ${target}`;
-            this.endBtn.textContent = '下一关';
+            this.endScore.textContent = `最终得分: ${this.score}`;
+            this.endBtn.textContent = '再来一局';
         } else {
             this.state = GameState.GAME_OVER;
             this.sound.playGameOver();
             this.endTitle.textContent = this.lives <= 0 ? '基地沦陷！' : '时间到！';
-            this.endScore.textContent = `得分: ${this.score} / ${target}`;
-            this.endBtn.textContent = this.level > 1 ? `重试第${this.level}关` : '再来一局';
+            this.endScore.textContent = `得分: ${this.score}`;
+            this.endBtn.textContent = '再来一局';
         }
         this.endDiv.style.display = 'flex';
         if (this.tutorial.active) this.tutorial.complete();
@@ -425,7 +409,7 @@ class Game {
         const nvActive = this.powerups.isNightVisionActive();
         const sonarActive = this.powerups.isSonarActive();
 
-        if (!this.phase.isDimOrDarker() || flareActive) {
+        if (!this.phase.isDimOrDarker() || flareActive || this.spawner.isBrightOverride()) {
             // Full visibility
             for (const enemy of this.enemies) {
                 if (enemy.alive) enemy.draw(ctx);
@@ -486,7 +470,7 @@ class Game {
 
         // HUD (no shake)
         const timeLeft = Math.max(0, CONFIG.ROUND_DURATION - this.elapsed);
-        this.hud.draw(ctx, this.score, getTargetScore(this.level), timeLeft, this.level, this.lives, {
+        this.hud.draw(ctx, this.score, null, timeLeft, null, this.lives, {
             ammo: this.turret.ammo,
             magazineSize: CONFIG.MAGAZINE_SIZE,
             reloading: this.turret.reloading,

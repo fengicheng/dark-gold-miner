@@ -8,6 +8,9 @@ export const Phase = {
     PULSE: 'pulse',
 };
 
+// Phase cycle length (repeats throughout the game)
+const CYCLE_LENGTH = CONFIG.PHASE_DARK_END + 20; // bright+dim+dark+pulse then repeat
+
 export class PhaseController {
     constructor() {
         this.reset();
@@ -18,15 +21,24 @@ export class PhaseController {
         this.darknessAlpha = 0;
     }
 
-    update(elapsed) {
-        if (elapsed < CONFIG.PHASE_BRIGHT_END) {
+    update(elapsed, brightOverride = false) {
+        if (brightOverride) {
             this.current = Phase.BRIGHT;
             this.darknessAlpha = 0;
-        } else if (elapsed < CONFIG.PHASE_DIM_END) {
+            return;
+        }
+
+        // Cycle through phases repeatedly
+        const t = elapsed % CYCLE_LENGTH;
+
+        if (t < CONFIG.PHASE_BRIGHT_END) {
+            this.current = Phase.BRIGHT;
+            this.darknessAlpha = 0;
+        } else if (t < CONFIG.PHASE_DIM_END) {
             this.current = Phase.DIM;
-            const progress = (elapsed - CONFIG.PHASE_BRIGHT_END) / (CONFIG.PHASE_DIM_END - CONFIG.PHASE_BRIGHT_END);
+            const progress = (t - CONFIG.PHASE_BRIGHT_END) / (CONFIG.PHASE_DIM_END - CONFIG.PHASE_BRIGHT_END);
             this.darknessAlpha = progress * 0.93;
-        } else if (elapsed < CONFIG.PHASE_DARK_END) {
+        } else if (t < CONFIG.PHASE_DARK_END) {
             this.current = Phase.DARK;
             this.darknessAlpha = 0.93;
         } else {

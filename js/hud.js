@@ -69,20 +69,18 @@ export class HUD {
         ctx.font = 'bold 16px "Courier New", monospace';
         ctx.textBaseline = 'middle';
 
-        // Level
-        ctx.fillStyle = '#AAA';
-        ctx.textAlign = 'left';
-        ctx.fillText(`关卡 ${level}`, 15, 18);
-
         // Score
-        ctx.fillStyle = score >= targetScore ? '#00FF00' : '#FFD700';
-        ctx.textAlign = 'center';
-        ctx.fillText(`${score} / ${targetScore}`, W / 2, 18);
+        ctx.fillStyle = '#FFD700';
+        ctx.textAlign = 'left';
+        ctx.fillText(`得分: ${score}`, 15, 18);
 
-        // Timer
+        // Timer (mm:ss)
+        const tl = Math.ceil(timeLeft);
+        const mm = Math.floor(tl / 60);
+        const ss = tl % 60;
         ctx.fillStyle = timeLeft <= 10 ? '#FF4444' : '#FFFFFF';
-        ctx.textAlign = 'right';
-        ctx.fillText(`${Math.ceil(timeLeft)}秒`, W - 80, 18);
+        ctx.textAlign = 'center';
+        ctx.fillText(`${mm}:${ss.toString().padStart(2, '0')}`, W / 2, 18);
 
         // Lives
         ctx.fillStyle = '#FF4444';

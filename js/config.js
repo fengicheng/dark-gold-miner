@@ -9,7 +9,7 @@ export const CONFIG = {
     TURRET_RADIUS: 18,
 
     // Timing (seconds)
-    ROUND_DURATION: 60,
+    ROUND_DURATION: 246, // 4:06
     PHASE_BRIGHT_END: 10,
     PHASE_DIM_END: 20,
     PHASE_DARK_END: 40,
@@ -18,8 +18,8 @@ export const CONFIG = {
     FIRE_RATE: 5,
     BULLET_SPEED: 800,
     BULLET_RADIUS: 3,
-    MAGAZINE_SIZE: 9,
-    RELOAD_TIME: 1.2,
+    MAGAZINE_SIZE: 20,
+    RELOAD_TIME: 0.6,
 
     // Kill illumination
     ILLUMINATE_RADIUS: 250,
@@ -49,12 +49,12 @@ export const CONFIG = {
     // Pulse phase
     PULSE_SPEED_MULT: 1.2,
 
-    // Scoring
+    // Scoring (survival mode, no target)
     BASE_TARGET_SCORE: 500,
     TARGET_SCORE_INCREMENT: 300,
 
     // Lives
-    MAX_LIVES: 3,
+    MAX_LIVES: 10,
 
     // Powerups
     POWERUP_MAX: 3,

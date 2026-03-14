@@ -257,68 +257,117 @@ export class Enemy {
     }
 }
 
-// Spawn manager
+// Scripted timeline events (time in seconds)
+const TIMELINE = [
+    { t: 13,  type: 'small',   enemies: ['normal'] },
+    { t: 25,  type: 'typed',   enemies: ['fast'], count: 3 },
+    { t: 50,  type: 'medium',  enemies: ['normal', 'fast'] },
+    // 65-70: rest (no spawns)
+    { t: 71,  type: 'mixed',   enemies: ['heavy', 'normal'], counts: { heavy: 2, normal: 3 } },
+    { t: 97,  type: 'typed',   enemies: ['stealth'], count: 3 },
+    { t: 110, type: 'medium',  enemies: ['normal', 'fast', 'heavy'] },
+    { t: 123, type: 'small',   enemies: ['normal', 'fast'] },
+    { t: 136, type: 'small',   enemies: ['normal', 'fast'] },
+    { t: 150, type: 'medium',  enemies: ['normal', 'fast', 'heavy', 'stealth'] },
+    { t: 161, type: 'typed',   enemies: ['bomber'], count: 2, bright: true },
+    { t: 175, type: 'typed',   enemies: ['bomber'], count: 2 },
+    { t: 180, type: 'small',   enemies: ['normal', 'fast'] },
+    // 188-194: rest
+    { t: 202, type: 'medium',  enemies: ['normal', 'fast', 'heavy', 'stealth'] },
+    { t: 220, type: 'large',   enemies: ['normal', 'fast', 'heavy', 'stealth', 'bomber'] },
+];
+
+// Rest periods (no random spawns)
+const REST_PERIODS = [
+    { start: 65, end: 70 },
+    { start: 188, end: 194 },
+];
+
+// Wave sizes
+const WAVE_SIZES = { small: [3, 4], medium: [5, 7], large: [10, 15] };
+
+// Spawn manager - scripted timeline + background trickle
 export class WaveSpawner {
     constructor() {
-        this.reset(1);
+        this.reset();
     }
 
-    reset(level) {
-        this.level = level;
-        this.timer = 0;
-        this.spawnInterval = Math.max(
-            CONFIG.SPAWN_INTERVAL_MIN,
-            CONFIG.SPAWN_INTERVAL_BASE - (level - 1) * CONFIG.SPAWN_RAMP_PER_LEVEL
-        );
-        this.spawnCount = 0;
+    reset() {
+        this.trickleTimer = 0;
+        this.trickleInterval = 2.5;
+        this.firedEvents = new Set();
+        this.introducedTypes = new Set(['normal']); // types available for random trickle
+        this.brightOverride = 0; // seconds remaining for forced bright
     }
 
     update(dt, elapsed, enemies) {
-        this.timer += dt;
-        if (this.timer >= this.spawnInterval) {
-            this.timer -= this.spawnInterval;
-            this._spawn(elapsed, enemies);
-            // Gradually speed up within a round
-            this.spawnInterval = Math.max(
-                CONFIG.SPAWN_INTERVAL_MIN,
-                this.spawnInterval - 0.02
-            );
+        // Update bright override
+        if (this.brightOverride > 0) this.brightOverride = Math.max(0, this.brightOverride - dt);
+
+        // Fire scripted events
+        for (let i = 0; i < TIMELINE.length; i++) {
+            const evt = TIMELINE[i];
+            if (elapsed >= evt.t && !this.firedEvents.has(i)) {
+                this.firedEvents.add(i);
+                // Register introduced types
+                for (const t of evt.enemies) this.introducedTypes.add(t);
+                // Trigger bright override
+                if (evt.bright) this.brightOverride = 14; // 2:41 -> bright until ~2:55
+                // Spawn wave
+                this._spawnWave(evt, enemies);
+            }
+        }
+
+        // Check rest periods
+        const inRest = REST_PERIODS.some(r => elapsed >= r.start && elapsed <= r.end);
+        if (inRest) return;
+
+        // Background trickle spawns
+        this.trickleTimer += dt;
+        // Gradually speed up trickle
+        this.trickleInterval = Math.max(1.2, 2.5 - elapsed / 200);
+        if (this.trickleTimer >= this.trickleInterval) {
+            this.trickleTimer -= this.trickleInterval;
+            const types = Array.from(this.introducedTypes);
+            const type = types[Math.floor(Math.random() * types.length)];
+            enemies.push(new Enemy(type, ...this._randPos()));
         }
     }
 
-    _spawn(elapsed, enemies) {
-        // Determine enemy type based on level and time
-        const types = this._getAvailableTypes(elapsed);
-        const type = types[Math.floor(Math.random() * types.length)];
+    _spawnWave(evt, enemies) {
+        let count;
+        if (evt.type === 'typed') {
+            count = evt.count;
+        } else if (evt.type === 'mixed') {
+            // Specific counts per type
+            for (const [t, c] of Object.entries(evt.counts)) {
+                for (let i = 0; i < c; i++) {
+                    enemies.push(new Enemy(t, ...this._randPos()));
+                }
+            }
+            return;
+        } else {
+            const [min, max] = WAVE_SIZES[evt.type] || [3, 4];
+            count = min + Math.floor(Math.random() * (max - min + 1));
+        }
+        for (let i = 0; i < count; i++) {
+            const type = evt.enemies[Math.floor(Math.random() * evt.enemies.length)];
+            enemies.push(new Enemy(type, ...this._randPos()));
+        }
+    }
 
-        // Spawn position: top edge or sides
-        let x, y;
+    _randPos() {
         const side = Math.random();
         if (side < 0.6) {
-            // Top
-            x = 40 + Math.random() * (CONFIG.CANVAS_WIDTH - 80);
-            y = -20;
+            return [40 + Math.random() * (CONFIG.CANVAS_WIDTH - 80), -20];
         } else if (side < 0.8) {
-            // Left
-            x = -20;
-            y = 20 + Math.random() * (CONFIG.CANVAS_HEIGHT * 0.3);
+            return [-20, 20 + Math.random() * (CONFIG.CANVAS_HEIGHT * 0.3)];
         } else {
-            // Right
-            x = CONFIG.CANVAS_WIDTH + 20;
-            y = 20 + Math.random() * (CONFIG.CANVAS_HEIGHT * 0.3);
+            return [CONFIG.CANVAS_WIDTH + 20, 20 + Math.random() * (CONFIG.CANVAS_HEIGHT * 0.3)];
         }
-
-        enemies.push(new Enemy(type, x, y));
-        this.spawnCount++;
     }
 
-    _getAvailableTypes(elapsed) {
-        const types = ['normal'];
-        if (this.level >= 1 && elapsed > 5) types.push('normal', 'fast');
-        if (this.level >= 2) types.push('heavy');
-        if (this.level >= 2 && elapsed > 15) types.push('stealth');
-        if (this.level >= 1 && elapsed > 20) types.push('bomber');
-        if (this.level >= 3) types.push('fast', 'bomber');
-        return types;
+    isBrightOverride() {
+        return this.brightOverride > 0;
     }
 }

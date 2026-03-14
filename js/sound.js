@@ -3,6 +3,8 @@ export class SoundManager {
     constructor() {
         this.ctx = null;
         this.darkBoost = 1.0;
+        this.bgm = null;
+        this.bgmGain = null;
     }
 
     init() {
@@ -230,6 +232,33 @@ export class SoundManager {
         filter.connect(g);
         source.start(now);
         source.stop(now + 2.1);
+    }
+
+    async playBGM() {
+        this.ensure();
+        this.stopBGM();
+        try {
+            const resp = await fetch('地狱边境雷达.mp3');
+            const buf = await resp.arrayBuffer();
+            const audioBuf = await this.ctx.decodeAudioData(buf);
+            this.bgm = this.ctx.createBufferSource();
+            this.bgm.buffer = audioBuf;
+            this.bgm.loop = true;
+            this.bgmGain = this.ctx.createGain();
+            this.bgmGain.gain.value = 0.3;
+            this.bgm.connect(this.bgmGain);
+            this.bgmGain.connect(this.ctx.destination);
+            this.bgm.start(0);
+        } catch (e) {
+            console.warn('BGM load failed:', e);
+        }
+    }
+
+    stopBGM() {
+        if (this.bgm) {
+            try { this.bgm.stop(); } catch (e) {}
+            this.bgm = null;
+        }
     }
 
     playFlare() {
