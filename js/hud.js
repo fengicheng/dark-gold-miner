@@ -83,10 +83,10 @@ export class HUD {
         ctx.fillText(`${mm}:${ss.toString().padStart(2, '0')}`, W / 2, 18);
 
         // Lives
-        ctx.fillStyle = '#FF4444';
         ctx.textAlign = 'right';
-        ctx.font = '14px Arial';
-        ctx.fillText('❤'.repeat(Math.max(0, lives)), W - 15, 18);
+        ctx.font = '16px Arial';
+        ctx.fillStyle = lives <= 3 ? '#FF4444' : '#FF6666';
+        ctx.fillText(`❤ ${lives}`, W - 15, 18);
 
         // Floating texts
         for (const ft of this.floatingTexts) {
