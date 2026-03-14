@@ -29,16 +29,24 @@ export class Bullet {
         if (!this.alive) return;
         // Trail
         for (let i = 0; i < this.trail.length; i++) {
-            const alpha = (i / this.trail.length) * 0.3;
-            ctx.fillStyle = `rgba(255,255,150,${alpha})`;
+            const alpha = (i / this.trail.length) * 0.4;
+            ctx.fillStyle = `rgba(255,160,40,${alpha})`;
             ctx.beginPath();
             ctx.arc(this.trail[i].x, this.trail[i].y, 2, 0, Math.PI * 2);
             ctx.fill();
         }
-        // Bullet
-        ctx.fillStyle = '#FFF';
-        ctx.shadowColor = '#FF8';
-        ctx.shadowBlur = 6;
+        // Bullet glow (illuminates small area)
+        const glow = ctx.createRadialGradient(this.x, this.y, 0, this.x, this.y, 40);
+        glow.addColorStop(0, 'rgba(255,160,40,0.25)');
+        glow.addColorStop(1, 'rgba(255,120,0,0)');
+        ctx.fillStyle = glow;
+        ctx.beginPath();
+        ctx.arc(this.x, this.y, 40, 0, Math.PI * 2);
+        ctx.fill();
+        // Bullet core
+        ctx.fillStyle = '#FF8800';
+        ctx.shadowColor = '#FFA040';
+        ctx.shadowBlur = 10;
         ctx.beginPath();
         ctx.arc(this.x, this.y, CONFIG.BULLET_RADIUS, 0, Math.PI * 2);
         ctx.fill();

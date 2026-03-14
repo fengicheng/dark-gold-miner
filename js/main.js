@@ -166,8 +166,17 @@ class Game {
             }
         }
 
-        // R 重新开始
+        // R 手动换弹
         if (this.input.consumeKey('r') || this.input.consumeKey('R')) {
+            if (!this.turret.reloading && this.turret.ammo < CONFIG.MAGAZINE_SIZE) {
+                this.turret.reloading = true;
+                this.turret.reloadTimer = CONFIG.RELOAD_TIME;
+                this.sound.playReload();
+            }
+        }
+
+        // Esc 重置游戏
+        if (this.input.consumeKey('Escape')) {
             this.startRound();
             return;
         }
@@ -265,6 +274,21 @@ class Game {
                     }
                     this.hitFeedback = 0.3;
                     break;
+                }
+            }
+        }
+
+        // Bullet proximity illumination (bullets light up nearby enemies briefly)
+        if (this.phase.isDimOrDarker()) {
+            for (const bullet of this.bullets) {
+                if (!bullet.alive) continue;
+                for (const enemy of this.enemies) {
+                    if (!enemy.alive || enemy.illuminated) continue;
+                    const dist = Math.hypot(bullet.x - enemy.x, bullet.y - enemy.y);
+                    if (dist < 50) {
+                        enemy.illuminateTimer = Math.max(enemy.illuminateTimer, 0.1);
+                        enemy.illuminated = true;
+                    }
                 }
             }
         }
