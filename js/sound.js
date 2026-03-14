@@ -238,7 +238,7 @@ export class SoundManager {
         this.ensure();
         this.stopBGM();
         try {
-            const resp = await fetch('地狱边境雷达.mp3');
+            const resp = await fetch('bgm.mp3');
             const buf = await resp.arrayBuffer();
             const audioBuf = await this.ctx.decodeAudioData(buf);
             this.bgm = this.ctx.createBufferSource();
